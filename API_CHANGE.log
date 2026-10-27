@@ -1,0 +1,124 @@
+# API_CHANGE.log — curp-next / curp-ine-padron
+
+Historial de todos los cambios y transferencias de datos al proyecto.
+Actualizar este archivo cada vez que se realice un cambio importante.
+
+---
+
+## [2026-10-27] Análisis inicial del estado de la migración
+
+**Realizado por:** Claude (sesión con luisfernandomendozav)
+
+### Hallazgos
+- Proyecto NeonDB `curp-ine-padron` creado el 2026-10-27.
+- Tablas existentes: `estados` (32 registros), `municipios` (2,457), `personas` (67,747,436).
+- Fuente: `data.rar` (9.3 GB comprimido / ~40 GB descomprimido) con 51 CSVs del padrón INE 2018.
+- Índices en `personas`: `idx_personas_curp`, `idx_personas_nombre (nombre,paterno,materno)`, `idx_personas_estado`.
+
+### Estados ya cargados en `personas` (18/32)
+| Estado              | Registros   |
+|---------------------|-------------|
+| AGUASCALIENTES      | 1,904,392   |
+| BAJACALIFORNIA      | 5,503,704   |
+| BAJACALIFORNIA SUR  | 1,039,034   |
+| CAMPECHE            | 1,290,444   |
+| CHIAPAS             | 4,726,462   |
+| CHIHUAHUA           | 5,548,668   |
+| COAHUILA            | 4,346,408   |
+| COLIMA              | 1,075,266   |
+| DISTRITO FEDERAL    | 6,278,322   |
+| DURANGO             | 2,607,588   |
+| GUANAJUATO          | 4,730,817   |
+| HIDALGO             | 4,283,784   |
+| JALISCO             | 7,269,300   |
+| MEXICO              | 4,515,101 ⚠️|
+| MICHOACAN           | 4,753,066   |
+| MORELOS             | 2,915,760   |
+| NAYARIT             | 1,719,538   |
+| NUEVO LEON          | 3,239,771   |
+| **TOTAL**           | **67,747,436** |
+
+### ⚠️ Alerta: Estado de México incompleto
+Estado de México tiene solo 4,515,101 registros pero el RAR contiene 6 archivos (EDM1–EDM6).
+EDM1–EDM5 miden ~960 MB c/u descomprimidos; EDM6 solo 284 MB.
+Probable que solo EDM6 (o parcial) fue cargado. **Pendiente revisar y recargar.**
+
+### Estados pendientes de cargar (14 estados, ~20 archivos CSV)
+| Carpeta RAR     | Estado           | Tamaño descomprimido |
+|-----------------|------------------|----------------------|
+| GRO/Gro.csv     | GUERRERO         | 1.05 GB              |
+| OAX1/Oax1.csv   | OAXACA           | 987 MB               |
+| OAX2/Oax2.csv   | OAXACA           | 218 MB               |
+| Pue1/Pue1.csv   | PUEBLA           | 987 MB               |
+| Pue2/Pue2.csv   | PUEBLA           | 916 MB               |
+| QRO/Qro.csv     | QUERETARO        | 663 MB               |
+| QROO/Qroo.csv   | QUINTANA ROO     | 522 MB               |
+| SIN/Sin.csv     | SINALOA          | 903 MB               |
+| SLP/Slp.csv     | SAN LUIS POTOSI  | 834 MB               |
+| SON/Son.csv     | SONORA           | 883 MB               |
+| TAB/Tab.csv     | TABASCO          | 717 MB               |
+| TAM/Tam.csv     | TAMAULIPAS       | 1.10 GB              |
+| TLX/TLX.csv     | TLAXCALA         | 382 MB               |
+| VER1/Ver1.csv   | VERACRUZ         | 990 MB               |
+| VER2/Ver2.csv   | VERACRUZ         | 990 MB               |
+| VER3/Ver3.csv   | VERACRUZ         | 447 MB               |
+| YUC/Yuc.csv     | YUCATAN          | 637 MB               |
+| ZAC/Zac.csv     | ZACATECAS        | 486 MB               |
+
+### Nota sobre duplicados en el RAR
+`JAL/Jal2.csv` (985,901,013 bytes) parece idéntico a `Jal2/Jal2.csv` (mismo tamaño).
+Jalisco ya está cargado con 7,269,300 registros — no recargar.
+
+---
+
+## [2026-10-27] Feature: Búsqueda de CURP por RFC
+
+**Realizado por:** Claude (sesión con luisfernandomendozav)
+
+### Cambios
+- Instalado `@neondatabase/serverless` como driver de Postgres para Next.js.
+- Creado `pages/api/buscar-rfc.js`: endpoint GET que recibe `?rfc=XXXX`, extrae los primeros 10 caracteres (4 letras + 6 dígitos), y busca en `personas` con `WHERE curp LIKE 'BASE10%'` (límite 20 resultados).
+- Actualizado `pages/index.js`: nueva sección "Buscar CURP por RFC" con input, botón, tabla de resultados.
+- Actualizado `styles/Home.module.css`: estilos para la sección RFC.
+- Creado `.env.local` con `DATABASE_URL` apuntando a Neon `curp-ine-padron`.
+
+### Lógica de búsqueda
+RFC `GUMJ800613SI5` → base10 `GUMJ800613` → SQL: `WHERE curp LIKE 'GUMJ800613%'`
+Los primeros 10 caracteres son idénticos en RFC y CURP: 4 letras clave del nombre + 6 dígitos de fecha de nacimiento.
+
+---
+
+## [2026-10-27] Inicio de carga de estados pendientes
+
+**Realizado por:** Claude (sesión con luisfernandomendozav)
+
+### Estrategia
+- Disco disponible: ~9.2 GB → extraer un CSV a la vez, cargar, eliminar.
+- Método: `7z e data.rar <archivo> -o/tmp/curp_import/` → `psql \COPY` → `rm`.
+- Script: `scripts/load_estado.sh`
+
+### Progreso de carga
+<!-- Actualizar esta sección con cada estado cargado -->
+
+| Fecha       | Archivo         | Estado          | Registros insertados | Status     |
+|-------------|-----------------|-----------------|----------------------|------------|
+| (pendiente) | GRO/Gro.csv     | GUERRERO        | -                    | ⏳ pendiente |
+| (pendiente) | OAX1/Oax1.csv   | OAXACA          | -                    | ⏳ pendiente |
+| (pendiente) | OAX2/Oax2.csv   | OAXACA          | -                    | ⏳ pendiente |
+| (pendiente) | Pue1/Pue1.csv   | PUEBLA          | -                    | ⏳ pendiente |
+| (pendiente) | Pue2/Pue2.csv   | PUEBLA          | -                    | ⏳ pendiente |
+| (pendiente) | QRO/Qro.csv     | QUERETARO       | -                    | ⏳ pendiente |
+| (pendiente) | QROO/Qroo.csv   | QUINTANA ROO    | -                    | ⏳ pendiente |
+| (pendiente) | SIN/Sin.csv     | SINALOA         | -                    | ⏳ pendiente |
+| (pendiente) | SLP/Slp.csv     | SAN LUIS POTOSI | -                    | ⏳ pendiente |
+| (pendiente) | SON/Son.csv     | SONORA          | -                    | ⏳ pendiente |
+| (pendiente) | TAB/Tab.csv     | TABASCO         | -                    | ⏳ pendiente |
+| (pendiente) | TAM/Tam.csv     | TAMAULIPAS      | -                    | ⏳ pendiente |
+| (pendiente) | TLX/TLX.csv     | TLAXCALA        | -                    | ⏳ pendiente |
+| (pendiente) | VER1/Ver1.csv   | VERACRUZ        | -                    | ⏳ pendiente |
+| (pendiente) | VER2/Ver2.csv   | VERACRUZ        | -                    | ⏳ pendiente |
+| (pendiente) | VER3/Ver3.csv   | VERACRUZ        | -                    | ⏳ pendiente |
+| (pendiente) | YUC/Yuc.csv     | YUCATAN         | -                    | ⏳ pendiente |
+| (pendiente) | ZAC/Zac.csv     | ZACATECAS       | -                    | ⏳ pendiente |
+
+---

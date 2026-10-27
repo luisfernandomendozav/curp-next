@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Head from 'next/head';
 import styles from '../styles/Home.module.css';
 
@@ -122,12 +122,33 @@ function calcCURP({ nombre, apellidoPaterno, apellidoMaterno, fechaNacimiento, s
 export default function Home() {
   const [form, setForm] = useState({ nombre: '', apellidoPaterno: '', apellidoMaterno: '', fechaNacimiento: '', sexo: '', estado: '' });
   const [showAudio, setShowAudio] = useState(false);
+  const [rfc, setRfc] = useState('');
+  const [rfcResult, setRfcResult] = useState(null);
+  const [rfcLoading, setRfcLoading] = useState(false);
+  const [rfcError, setRfcError] = useState('');
 
   const r = calcCURP(form);
 
   function handleChange(e) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
+
+  const buscarPorRfc = useCallback(async () => {
+    if (!rfc.trim()) return;
+    setRfcLoading(true);
+    setRfcError('');
+    setRfcResult(null);
+    try {
+      const res = await fetch(`/api/buscar-rfc?rfc=${encodeURIComponent(rfc.trim())}`);
+      const data = await res.json();
+      if (!res.ok) { setRfcError(data.error || 'Error en la búsqueda'); return; }
+      setRfcResult(data);
+    } catch {
+      setRfcError('Error de conexión. Intenta de nuevo.');
+    } finally {
+      setRfcLoading(false);
+    }
+  }, [rfc]);
 
   return (
     <>
@@ -288,6 +309,78 @@ export default function Home() {
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* RFC → CURP Search */}
+          <section className={styles.rfcSection}>
+            <h2>Buscar CURP por RFC</h2>
+            <p className={styles.rfcDesc}>
+              Los primeros 10 caracteres del RFC son idénticos a los primeros 10 de la CURP.
+              Ingresa tu RFC y buscamos en el padrón.
+            </p>
+            <div className={styles.rfcInputRow}>
+              <input
+                className={styles.rfcInput}
+                value={rfc}
+                onChange={e => setRfc(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && buscarPorRfc()}
+                placeholder="Ej: GUMJ800613SI5"
+                maxLength={13}
+                autoComplete="off"
+              />
+              <button
+                className={styles.rfcBtn}
+                onClick={buscarPorRfc}
+                disabled={rfcLoading || rfc.length < 10}
+              >
+                {rfcLoading ? 'Buscando…' : 'Buscar'}
+              </button>
+            </div>
+
+            {rfcResult && (
+              <div className={styles.rfcBase10}>
+                Buscando CURPs que inician con: <code>{rfcResult.base10}</code>
+              </div>
+            )}
+
+            {rfcError && (
+              <div className={styles.rfcError}>{rfcError}</div>
+            )}
+
+            {rfcResult && rfcResult.resultados.length === 0 && (
+              <div className={styles.rfcEmpty}>
+                No se encontraron registros con esa clave en el padrón.
+              </div>
+            )}
+
+            {rfcResult && rfcResult.resultados.length > 0 && (
+              <div className={styles.rfcResults}>
+                <div className={styles.rfcCount}>
+                  {rfcResult.resultados.length} resultado{rfcResult.resultados.length !== 1 ? 's' : ''} encontrado{rfcResult.resultados.length !== 1 ? 's' : ''}
+                  {rfcResult.resultados.length === 20 ? ' (mostrando primeros 20)' : ''}
+                </div>
+                <div className={styles.rfcTable}>
+                  <div className={styles.rfcTableHead}>
+                    <span>CURP</span>
+                    <span>Nombre</span>
+                    <span>Ap. Paterno</span>
+                    <span>Ap. Materno</span>
+                    <span>Nac.</span>
+                    <span>Sexo</span>
+                  </div>
+                  {rfcResult.resultados.map((p, i) => (
+                    <div key={i} className={styles.rfcTableRow}>
+                      <span className={styles.curpCell}>{p.curp}</span>
+                      <span>{p.nombre}</span>
+                      <span>{p.paterno}</span>
+                      <span>{p.materno}</span>
+                      <span>{p.fecnac}</span>
+                      <span>{p.sexo === 'H' ? 'H' : 'M'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Audio transcription */}
