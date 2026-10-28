@@ -71,6 +71,28 @@ Jalisco ya está cargado con 7,269,300 registros — no recargar.
 
 ---
 
+## [2026-10-28] Fix: Búsqueda por RFC — correcciones por feedback de Hugo
+
+**Realizado por:** Claude (sesión con luisfernandomendozav)
+
+### Problemas reportados
+- "Buscar CURP por RFC no funciona" — la sección quedaba debajo del Info Section (invisible sin scroll)
+- "Tiene que buscar en todos los estados automático" — el SQL ya lo hacía, pero el mensaje era confuso
+- Fecha de nacimiento mostraba `06/13/80 00:00:00` en lugar de solo `06/13/80`
+- Resultados mostraban `estado_id` (número) en vez del nombre del estado
+
+### Cambios
+- Movida la sección RFC para aparecer ANTES de la sección informativa (visible al cargar la página)
+- API ahora hace JOIN con `estados` para devolver nombre del estado en vez de ID
+- Tabla de resultados rediseñada: columnas = CURP · Nombre completo · F.Nac · Sexo · Estado
+- Fecha limpiada: `p.fecnac.split(' ')[0]` para mostrar solo `06/13/80`
+- Input limpia caracteres especiales automáticamente al escribir
+- Contador regresivo: "Ingresa al menos 10 caracteres (N restantes)"
+- Badge amarillo mostrando cobertura actual: "18 de 32 estados · ~68M registros"
+- Mensaje de cero resultados lista los 14 estados aún no cargados
+
+---
+
 ## [2026-10-27] Feature: Búsqueda de CURP por RFC
 
 **Realizado por:** Claude (sesión con luisfernandomendozav)

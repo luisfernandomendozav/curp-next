@@ -276,6 +276,86 @@ export default function Home() {
             </section>
           </div>
 
+          {/* RFC → CURP Search */}
+          <section className={styles.rfcSection}>
+            <h2>Buscar CURP por RFC</h2>
+            <p className={styles.rfcDesc}>
+              Los primeros 10 caracteres del RFC son idénticos a los primeros 10 de la CURP
+              (4 letras del nombre + 6 dígitos de fecha). Ingresa el RFC completo o solo los primeros 10 caracteres
+              y buscamos en todos los estados del padrón automáticamente.
+            </p>
+
+            <div className={styles.rfcCoverage}>
+              Cobertura actual: <strong>18 de 32 estados</strong> cargados · ~68M registros
+            </div>
+
+            <div className={styles.rfcInputRow}>
+              <input
+                className={styles.rfcInput}
+                value={rfc}
+                onChange={e => setRfc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                onKeyDown={e => e.key === 'Enter' && buscarPorRfc()}
+                placeholder="Ej: GUMJ800613SI5"
+                maxLength={18}
+                autoComplete="off"
+              />
+              <button
+                className={styles.rfcBtn}
+                onClick={buscarPorRfc}
+                disabled={rfcLoading || rfc.length < 10}
+              >
+                {rfcLoading ? 'Buscando…' : 'Buscar'}
+              </button>
+            </div>
+            {rfc.length > 0 && rfc.length < 10 && (
+              <div className={styles.rfcHint}>Ingresa al menos 10 caracteres ({10 - rfc.length} restantes)</div>
+            )}
+
+            {rfcError && (
+              <div className={styles.rfcError}>{rfcError}</div>
+            )}
+
+            {rfcResult && (
+              <div className={styles.rfcBase10}>
+                Buscando CURPs que inician con: <code>{rfcResult.base10}</code>
+              </div>
+            )}
+
+            {rfcResult && rfcResult.resultados.length === 0 && (
+              <div className={styles.rfcEmpty}>
+                No se encontraron registros con la clave <strong>{rfcResult.base10}</strong> en los estados actualmente cargados.
+                <br />Puede que la persona sea de un estado aún no disponible (GRO, OAX, PUE, QRO, QROO, SIN, SLP, SON, TAB, TAM, TLX, VER, YUC, ZAC).
+              </div>
+            )}
+
+            {rfcResult && rfcResult.resultados.length > 0 && (
+              <div className={styles.rfcResults}>
+                <div className={styles.rfcCount}>
+                  {rfcResult.resultados.length} resultado{rfcResult.resultados.length !== 1 ? 's' : ''} encontrado{rfcResult.resultados.length !== 1 ? 's' : ''}
+                  {rfcResult.resultados.length === 20 ? ' (mostrando primeros 20)' : ''}
+                </div>
+                <div className={styles.rfcTable}>
+                  <div className={styles.rfcTableHead}>
+                    <span>CURP</span>
+                    <span>Nombre completo</span>
+                    <span>F. Nac.</span>
+                    <span>Sexo</span>
+                    <span>Estado</span>
+                  </div>
+                  {rfcResult.resultados.map((p, i) => (
+                    <div key={i} className={styles.rfcTableRow}>
+                      <span className={styles.curpCell}>{p.curp}</span>
+                      <span>{[p.nombre, p.paterno, p.materno].filter(Boolean).join(' ')}</span>
+                      <span>{p.fecnac ? p.fecnac.split(' ')[0] : '—'}</span>
+                      <span>{p.sexo === 'H' ? 'Hombre' : 'Mujer'}</span>
+                      <span>{p.estado || '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
           {/* Info Section */}
           <section className={styles.infoSection}>
             <h2>¿Cómo funciona la búsqueda con los primeros 10 caracteres?</h2>
@@ -309,78 +389,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </section>
-
-          {/* RFC → CURP Search */}
-          <section className={styles.rfcSection}>
-            <h2>Buscar CURP por RFC</h2>
-            <p className={styles.rfcDesc}>
-              Los primeros 10 caracteres del RFC son idénticos a los primeros 10 de la CURP.
-              Ingresa tu RFC y buscamos en el padrón.
-            </p>
-            <div className={styles.rfcInputRow}>
-              <input
-                className={styles.rfcInput}
-                value={rfc}
-                onChange={e => setRfc(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === 'Enter' && buscarPorRfc()}
-                placeholder="Ej: GUMJ800613SI5"
-                maxLength={13}
-                autoComplete="off"
-              />
-              <button
-                className={styles.rfcBtn}
-                onClick={buscarPorRfc}
-                disabled={rfcLoading || rfc.length < 10}
-              >
-                {rfcLoading ? 'Buscando…' : 'Buscar'}
-              </button>
-            </div>
-
-            {rfcResult && (
-              <div className={styles.rfcBase10}>
-                Buscando CURPs que inician con: <code>{rfcResult.base10}</code>
-              </div>
-            )}
-
-            {rfcError && (
-              <div className={styles.rfcError}>{rfcError}</div>
-            )}
-
-            {rfcResult && rfcResult.resultados.length === 0 && (
-              <div className={styles.rfcEmpty}>
-                No se encontraron registros con esa clave en el padrón.
-              </div>
-            )}
-
-            {rfcResult && rfcResult.resultados.length > 0 && (
-              <div className={styles.rfcResults}>
-                <div className={styles.rfcCount}>
-                  {rfcResult.resultados.length} resultado{rfcResult.resultados.length !== 1 ? 's' : ''} encontrado{rfcResult.resultados.length !== 1 ? 's' : ''}
-                  {rfcResult.resultados.length === 20 ? ' (mostrando primeros 20)' : ''}
-                </div>
-                <div className={styles.rfcTable}>
-                  <div className={styles.rfcTableHead}>
-                    <span>CURP</span>
-                    <span>Nombre</span>
-                    <span>Ap. Paterno</span>
-                    <span>Ap. Materno</span>
-                    <span>Nac.</span>
-                    <span>Sexo</span>
-                  </div>
-                  {rfcResult.resultados.map((p, i) => (
-                    <div key={i} className={styles.rfcTableRow}>
-                      <span className={styles.curpCell}>{p.curp}</span>
-                      <span>{p.nombre}</span>
-                      <span>{p.paterno}</span>
-                      <span>{p.materno}</span>
-                      <span>{p.fecnac}</span>
-                      <span>{p.sexo === 'H' ? 'H' : 'M'}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </section>
 
           {/* Audio transcription */}

@@ -26,9 +26,10 @@ export default async function handler(req, res) {
   try {
     const sql = neon(process.env.DATABASE_URL);
     const rows = await sql`
-      SELECT curp, nombre, paterno, materno, fecnac, sexo, estado_id
-      FROM personas
-      WHERE curp LIKE ${base10 + '%'}
+      SELECT p.curp, p.nombre, p.paterno, p.materno, p.fecnac, p.sexo, e.nombre AS estado
+      FROM personas p
+      LEFT JOIN estados e ON p.estado_id = e.id
+      WHERE p.curp LIKE ${base10 + '%'}
       LIMIT 20
     `;
     res.status(200).json({ base10, resultados: rows });
