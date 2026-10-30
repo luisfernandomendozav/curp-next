@@ -132,7 +132,7 @@ export default function Home() {
   const [slowSearch, setSlowSearch] = useState(false);
   const wrapperRef = useRef(null);
   const debounceRef = useRef(null);
-  const abortRef = useRef(null);
+  const searchReqId = useRef(0);
   const slowTimerRef = useRef(null);
 
   // Nombre search
@@ -143,7 +143,7 @@ export default function Home() {
   const [nombreLoading, setNombreLoading] = useState(false);
   const [nombreSlow, setNombreSlow] = useState(false);
   const nombreDebounceRef = useRef(null);
-  const nombreAbortRef = useRef(null);
+  const nombreReqId = useRef(0);
   const nombreSlowTimerRef = useRef(null);
 
   const r = calcCURP(form);
@@ -162,7 +162,6 @@ export default function Home() {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (abortRef.current) abortRef.current.abort();
     if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
 
     if (searchQuery.length < 2) {
@@ -178,26 +177,24 @@ export default function Home() {
     slowTimerRef.current = setTimeout(() => setSlowSearch(true), 3000);
 
     debounceRef.current = setTimeout(async () => {
-      const controller = new AbortController();
-      abortRef.current = controller;
+      const myId = ++searchReqId.current;
       try {
         const endpoint = searchMode === 'curp' ? 'buscar-curp' : 'buscar-rfc';
         const param = searchMode === 'curp' ? 'curp' : 'rfc';
-        const res = await fetch(
-          `/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`,
-          { signal: controller.signal }
-        );
+        const res = await fetch(`/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`);
         const data = await res.json();
+        if (myId !== searchReqId.current) return;
         if (res.ok) {
           setSuggestions(data.resultados || []);
           setShowDropdown(true);
         } else {
           setSuggestions([]);
         }
-      } catch (err) {
-        if (err.name !== 'AbortError') setSuggestions([]);
+      } catch {
+        if (myId !== searchReqId.current) return;
+        setSuggestions([]);
       } finally {
-        if (!controller.signal.aborted) {
+        if (myId === searchReqId.current) {
           setSearchLoading(false);
           setSlowSearch(false);
           clearTimeout(slowTimerRef.current);
@@ -207,7 +204,6 @@ export default function Home() {
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (abortRef.current) abortRef.current.abort();
       if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
     };
   }, [searchQuery, searchMode]);
@@ -224,7 +220,6 @@ export default function Home() {
 
   useEffect(() => {
     if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
-    if (nombreAbortRef.current) nombreAbortRef.current.abort();
     if (nombreSlowTimerRef.current) clearTimeout(nombreSlowTimerRef.current);
 
     const hasNombre = nombreQ.length >= 2;
@@ -241,20 +236,21 @@ export default function Home() {
     nombreSlowTimerRef.current = setTimeout(() => setNombreSlow(true), 3000);
 
     nombreDebounceRef.current = setTimeout(async () => {
-      const controller = new AbortController();
-      nombreAbortRef.current = controller;
+      const myId = ++nombreReqId.current;
       try {
         const params = new URLSearchParams();
         if (nombreQ) params.set('nombre', nombreQ);
         if (paternoQ) params.set('paterno', paternoQ);
         if (maternoQ) params.set('materno', maternoQ);
-        const res = await fetch(`/api/buscar-nombre?${params}`, { signal: controller.signal });
+        const res = await fetch(`/api/buscar-nombre?${params}`);
         const data = await res.json();
+        if (myId !== nombreReqId.current) return;
         setNombreResults(res.ok ? (data.resultados || []) : []);
-      } catch (err) {
-        if (err.name !== 'AbortError') setNombreResults([]);
+      } catch {
+        if (myId !== nombreReqId.current) return;
+        setNombreResults([]);
       } finally {
-        if (!controller.signal.aborted) {
+        if (myId === nombreReqId.current) {
           setNombreLoading(false);
           setNombreSlow(false);
           clearTimeout(nombreSlowTimerRef.current);
@@ -264,7 +260,6 @@ export default function Home() {
 
     return () => {
       if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
-      if (nombreAbortRef.current) nombreAbortRef.current.abort();
       if (nombreSlowTimerRef.current) clearTimeout(nombreSlowTimerRef.current);
     };
   }, [nombreQ, paternoQ, maternoQ]);
