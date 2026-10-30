@@ -121,7 +121,6 @@ function calcCURP({ nombre, apellidoPaterno, apellidoMaterno, fechaNacimiento, s
 
 export default function Home() {
   const [form, setForm] = useState({ nombre: '', apellidoPaterno: '', apellidoMaterno: '', fechaNacimiento: '', sexo: '', estado: '' });
-  const [showAudio, setShowAudio] = useState(false);
   const [searchMode, setSearchMode] = useState('curp');
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -146,7 +145,6 @@ export default function Home() {
   }
 
   useEffect(() => {
-    setSelectedItem(null);
     if (searchQuery.length < 2) {
       setSuggestions([]);
       setShowDropdown(false);
@@ -190,7 +188,6 @@ export default function Home() {
   function selectItem(item) {
     setSelectedItem(item);
     setShowDropdown(false);
-    setSearchQuery(item.curp);
   }
 
   function switchMode(mode) {
@@ -368,7 +365,10 @@ export default function Home() {
                 <input
                   className={styles.rfcInput}
                   value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                  onChange={e => {
+                    setSelectedItem(null);
+                    setSearchQuery(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                  }}
                   onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
                   placeholder={searchMode === 'curp' ? 'Ej: GO, GOBO, GOBO800613…' : 'Ej: GO, GUMJ, GUMJ800613…'}
                   maxLength={18}
@@ -431,63 +431,6 @@ export default function Home() {
             )}
           </section>
 
-          {/* Info Section */}
-          <section className={styles.infoSection}>
-            <h2>¿Cómo funciona la búsqueda con los primeros 10 caracteres?</h2>
-            <div className={styles.steps}>
-              <div className={styles.step}>
-                <div className={styles.stepNum}>1</div>
-                <div>
-                  <strong>4 letras clave del nombre</strong>
-                  <p>Se construyen con tu primer apellido (1ª letra + 1ª vocal interior), segundo apellido (1ª letra) y nombre (1ª letra). Ejemplo: González Beltrán Omar → <code>GOBO</code></p>
-                </div>
-              </div>
-              <div className={styles.step}>
-                <div className={styles.stepNum}>2</div>
-                <div>
-                  <strong>6 dígitos de fecha</strong>
-                  <p>Año, mes y día de nacimiento en formato AAMMDD. Ejemplo: 13 de junio de 1971 → <code>710613</code></p>
-                </div>
-              </div>
-              <div className={styles.step}>
-                <div className={styles.stepNum}>3</div>
-                <div>
-                  <strong>La clave base <code>GOBO710613</code></strong>
-                  <p>Es idéntica en CURP y RFC. Con ella puedes filtrar en bases como IMSS para encontrar o verificar un CURP sin necesidad de la clave completa.</p>
-                </div>
-              </div>
-              <div className={styles.step}>
-                <div className={styles.stepNum}>4</div>
-                <div>
-                  <strong>Afinar por estado</strong>
-                  <p>Si dos personas comparten nombre y fecha de nacimiento, el estado de nacimiento diferencia sus CURPs. Es estadísticamente muy poco probable coincidir en todo.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Audio transcription */}
-          <section className={styles.audioSection}>
-            <button className={styles.toggleBtn} onClick={() => setShowAudio(!showAudio)}>
-              {showAudio ? '▲ Ocultar' : '▼ Ver'} transcripción del audio original
-            </button>
-            {showAudio && (
-              <blockquote className={styles.transcription}>
-                <p>
-                  &ldquo;Si tú quieres sacar tu CURP y ves tu RFC, los primeros 8 caracteres son iguales —
-                  son las 2 letras de tu primer apellido y lo del nombre. González Beltrán Omar es <strong>GOBO</strong>,
-                  por ejemplo: Go de González, B de Beltrán, O de Omar. Y si buscas el RFC, el CURP empieza igual:
-                  <strong> GOBO710613</strong>. Entonces, si filtro con el RFC tomando únicamente los primeros 8 caracteres,
-                  puedo buscar en la base del IMSS y sacar qué CURP se llama igual que Omar González.
-                  Si alguien se llama igual y nació el mismo día, por lógica va a ser tú. Con el IMSS y con el RFC,
-                  de ahí tienes el CURP. La otra forma es cruzar los 8 dígitos con la base del CURP que aparece en el IMSS,
-                  hacerlo con la terminación de hombre o mujer, y corriéndolo por estado.
-                  Hay un González Beltrán o Marantonio que nació el 13 de junio del 71 —
-                  no creo que haya otro en Sonora.&rdquo;
-                </p>
-              </blockquote>
-            )}
-          </section>
         </main>
 
         <footer className={styles.footer}>
