@@ -121,6 +121,8 @@ function calcCURP({ nombre, apellidoPaterno, apellidoMaterno, fechaNacimiento, s
 
 export default function Home() {
   const [form, setForm] = useState({ nombre: '', apellidoPaterno: '', apellidoMaterno: '', fechaNacimiento: '', sexo: '', estado: '' });
+
+  // CURP/RFC autocomplete search
   const [searchMode, setSearchMode] = useState('curp');
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -129,6 +131,14 @@ export default function Home() {
   const [searchLoading, setSearchLoading] = useState(false);
   const wrapperRef = useRef(null);
   const debounceRef = useRef(null);
+
+  // Nombre search
+  const [nombreQ, setNombreQ] = useState('');
+  const [paternoQ, setPaternoQ] = useState('');
+  const [maternoQ, setMaternoQ] = useState('');
+  const [nombreResults, setNombreResults] = useState(null);
+  const [nombreLoading, setNombreLoading] = useState(false);
+  const nombreDebounceRef = useRef(null);
 
   const r = calcCURP(form);
 
@@ -185,6 +195,35 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, []);
 
+  useEffect(() => {
+    const hasNombre = nombreQ.length >= 2;
+    const hasPaterno = paternoQ.length >= 2;
+    if (!hasNombre && !hasPaterno) {
+      setNombreResults(null);
+      setNombreLoading(false);
+      if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
+      return;
+    }
+    setNombreLoading(true);
+    if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
+    nombreDebounceRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (nombreQ) params.set('nombre', nombreQ);
+        if (paternoQ) params.set('paterno', paternoQ);
+        if (maternoQ) params.set('materno', maternoQ);
+        const res = await fetch(`/api/buscar-nombre?${params}`);
+        const data = await res.json();
+        setNombreResults(res.ok ? (data.resultados || []) : []);
+      } catch {
+        setNombreResults([]);
+      } finally {
+        setNombreLoading(false);
+      }
+    }, 500);
+    return () => { if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current); };
+  }, [nombreQ, paternoQ, maternoQ]);
+
   function selectItem(item) {
     setSelectedItem(item);
     setShowDropdown(false);
@@ -208,12 +247,180 @@ export default function Home() {
       <div className={styles.page}>
         <header className={styles.header}>
           <div className={styles.headerInner}>
-            <h1>Calculadora de CURP</h1>
-            <p>Genera tu clave y entiende cómo se construye</p>
+            <h1>Padrón Electoral · Búsqueda CURP</h1>
+            <p>Busca por CURP, RFC o nombre en el padrón electoral</p>
           </div>
         </header>
 
         <main className={styles.main}>
+          {/* 1. Buscar por CURP / RFC */}
+          <section className={styles.rfcSection}>
+            <h2>Buscar por CURP o RFC</h2>
+
+            <div className={styles.searchTabs}>
+              <button
+                className={searchMode === 'curp' ? styles.searchTabActive : styles.searchTab}
+                onClick={() => switchMode('curp')}
+              >
+                Por CURP
+              </button>
+              <button
+                className={searchMode === 'rfc' ? styles.searchTabActive : styles.searchTab}
+                onClick={() => switchMode('rfc')}
+              >
+                Por RFC
+              </button>
+            </div>
+
+            <div className={styles.rfcCoverage}>
+              Cobertura: <strong>18 de 32 estados</strong> · ~68M registros
+            </div>
+
+            <div className={styles.rfcInputRow}>
+              <div className={styles.searchWrapper} ref={wrapperRef}>
+                <input
+                  className={styles.rfcInput}
+                  value={searchQuery}
+                  onChange={e => {
+                    setSelectedItem(null);
+                    setSearchQuery(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                  }}
+                  onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+                  placeholder={searchMode === 'curp' ? 'Ej: GO, GOBO, GOBO800613…' : 'Ej: GO, GUMJ, GUMJ800613…'}
+                  maxLength={18}
+                  autoComplete="off"
+                />
+
+                {searchLoading && searchQuery.length >= 2 && (
+                  <div className={styles.dropdown}>
+                    <div className={styles.dropdownLoading}>Buscando…</div>
+                  </div>
+                )}
+
+                {!searchLoading && showDropdown && suggestions.length > 0 && (
+                  <div className={styles.dropdown}>
+                    {suggestions.length === 50 && (
+                      <div className={styles.dropdownCount}>
+                        Mostrando 50 — escribe más para afinar
+                      </div>
+                    )}
+                    {suggestions.map((item, i) => (
+                      <div key={i} className={styles.dropdownItem} onClick={() => selectItem(item)}>
+                        <div className={styles.dropdownCurp}>{item.curp}</div>
+                        <div className={styles.dropdownName}>
+                          {[item.nombre, item.paterno, item.materno].filter(Boolean).join(' ')}
+                        </div>
+                        <div className={styles.dropdownMeta}>
+                          {formatFecnac(item.fecnac)} · {item.sexo === 'H' ? 'Hombre' : item.sexo === 'M' ? 'Mujer' : item.sexo || '—'} · {item.estado || '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!searchLoading && showDropdown && searchQuery.length >= 2 && suggestions.length === 0 && (
+                  <div className={styles.dropdown}>
+                    <div className={styles.dropdownLoading}>
+                      Sin resultados para <strong>{searchQuery}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {searchQuery.length === 1 && (
+              <div className={styles.rfcHint}>Ingresa al menos 2 caracteres</div>
+            )}
+
+            {selectedItem && (
+              <div className={styles.selectedCard}>
+                <div className={styles.selectedCurp}>{selectedItem.curp}</div>
+                <div className={styles.selectedName}>
+                  {[selectedItem.nombre, selectedItem.paterno, selectedItem.materno].filter(Boolean).join(' ')}
+                </div>
+                <div className={styles.selectedMeta}>
+                  <span>Nacimiento: {formatFecnac(selectedItem.fecnac)}</span>
+                  <span>{selectedItem.sexo === 'H' ? 'Hombre' : selectedItem.sexo === 'M' ? 'Mujer' : selectedItem.sexo || '—'}</span>
+                  <span>{selectedItem.estado || '—'}</span>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 2. Buscar por nombre completo */}
+          <section className={styles.rfcSection}>
+            <h2>Buscar por nombre completo</h2>
+            <p className={styles.rfcDesc}>
+              Busca por nombre, apellido paterno y/o materno. Mínimo 2 caracteres en cualquier campo para iniciar.
+            </p>
+
+            <div className={styles.nombreGrid}>
+              <div className={styles.nombreField}>
+                <label>Nombre(s)</label>
+                <input
+                  value={nombreQ}
+                  onChange={e => setNombreQ(e.target.value.toUpperCase().replace(/[^A-Z\s]/g, ''))}
+                  placeholder="LUIS MIGUEL"
+                  autoComplete="off"
+                />
+              </div>
+              <div className={styles.nombreField}>
+                <label>Apellido paterno</label>
+                <input
+                  value={paternoQ}
+                  onChange={e => setPaternoQ(e.target.value.toUpperCase().replace(/[^A-Z\s]/g, ''))}
+                  placeholder="GONZALEZ"
+                  autoComplete="off"
+                />
+              </div>
+              <div className={styles.nombreField}>
+                <label>Apellido materno</label>
+                <input
+                  value={maternoQ}
+                  onChange={e => setMaternoQ(e.target.value.toUpperCase().replace(/[^A-Z\s]/g, ''))}
+                  placeholder="LOPEZ"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {nombreLoading && (
+              <div className={styles.dropdownLoading} style={{ padding: '12px 0' }}>Buscando…</div>
+            )}
+
+            {!nombreLoading && nombreResults !== null && nombreResults.length === 0 && (
+              <div className={styles.rfcEmpty}>Sin resultados en los estados cargados.</div>
+            )}
+
+            {!nombreLoading && nombreResults && nombreResults.length > 0 && (
+              <div className={styles.rfcResults}>
+                <div className={styles.rfcCount}>
+                  {nombreResults.length} resultado{nombreResults.length !== 1 ? 's' : ''}
+                  {nombreResults.length === 50 ? ' (mostrando 50 — agrega más datos para afinar)' : ''}
+                </div>
+                <div className={styles.rfcTable}>
+                  <div className={styles.rfcTableHead}>
+                    <span>CURP</span>
+                    <span>Nombre completo</span>
+                    <span>F. Nac.</span>
+                    <span>Sexo</span>
+                    <span>Estado</span>
+                  </div>
+                  {nombreResults.map((p, i) => (
+                    <div key={i} className={styles.rfcTableRow}>
+                      <span className={styles.curpCell}>{p.curp}</span>
+                      <span>{[p.nombre, p.paterno, p.materno].filter(Boolean).join(' ')}</span>
+                      <span>{formatFecnac(p.fecnac)}</span>
+                      <span>{p.sexo === 'H' ? 'Hombre' : p.sexo === 'M' ? 'Mujer' : p.sexo || '—'}</span>
+                      <span>{p.estado || '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 3. Calculadora CURP */}
           <div className={styles.grid}>
             {/* Form */}
             <section className={styles.card}>
@@ -324,112 +531,6 @@ export default function Home() {
             </section>
           </div>
 
-          {/* Búsqueda en el Padrón */}
-          <section className={styles.rfcSection}>
-            <h2>Buscar en el Padrón Electoral</h2>
-
-            <div className={styles.searchTabs}>
-              <button
-                className={searchMode === 'curp' ? styles.searchTabActive : styles.searchTab}
-                onClick={() => switchMode('curp')}
-              >
-                Buscar por CURP
-              </button>
-              <button
-                className={searchMode === 'rfc' ? styles.searchTabActive : styles.searchTab}
-                onClick={() => switchMode('rfc')}
-              >
-                Buscar por RFC
-              </button>
-            </div>
-
-            {searchMode === 'curp' ? (
-              <p className={styles.rfcDesc}>
-                Ingresa los primeros caracteres de la CURP para buscar en el padrón.
-                Con 2 caracteres ya obtienes resultados; entre más completa, más precisa la búsqueda.
-              </p>
-            ) : (
-              <p className={styles.rfcDesc}>
-                Los primeros 10 caracteres del RFC son idénticos a los primeros 10 de la CURP
-                (4 letras del nombre + 6 dígitos de fecha). Con 2 caracteres ya obtienes resultados;
-                con 10 o más el filtro es muy preciso.
-              </p>
-            )}
-
-            <div className={styles.rfcCoverage}>
-              Cobertura actual: <strong>18 de 32 estados</strong> cargados · ~68M registros
-            </div>
-
-            <div className={styles.rfcInputRow}>
-              <div className={styles.searchWrapper} ref={wrapperRef}>
-                <input
-                  className={styles.rfcInput}
-                  value={searchQuery}
-                  onChange={e => {
-                    setSelectedItem(null);
-                    setSearchQuery(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
-                  }}
-                  onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
-                  placeholder={searchMode === 'curp' ? 'Ej: GO, GOBO, GOBO800613…' : 'Ej: GO, GUMJ, GUMJ800613…'}
-                  maxLength={18}
-                  autoComplete="off"
-                />
-
-                {searchLoading && searchQuery.length >= 2 && (
-                  <div className={styles.dropdown}>
-                    <div className={styles.dropdownLoading}>Buscando…</div>
-                  </div>
-                )}
-
-                {!searchLoading && showDropdown && suggestions.length > 0 && (
-                  <div className={styles.dropdown}>
-                    {suggestions.length === 50 && (
-                      <div className={styles.dropdownCount}>
-                        Mostrando 50 resultados — escribe más para afinar
-                      </div>
-                    )}
-                    {suggestions.map((item, i) => (
-                      <div key={i} className={styles.dropdownItem} onClick={() => selectItem(item)}>
-                        <div className={styles.dropdownCurp}>{item.curp}</div>
-                        <div className={styles.dropdownName}>
-                          {[item.nombre, item.paterno, item.materno].filter(Boolean).join(' ')}
-                        </div>
-                        <div className={styles.dropdownMeta}>
-                          {formatFecnac(item.fecnac)} · {item.sexo === 'H' ? 'Hombre' : item.sexo === 'M' ? 'Mujer' : item.sexo || '—'} · {item.estado || '—'}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {!searchLoading && showDropdown && searchQuery.length >= 2 && suggestions.length === 0 && (
-                  <div className={styles.dropdown}>
-                    <div className={styles.dropdownLoading}>
-                      Sin resultados para <strong>{searchQuery}</strong> en los estados cargados
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {searchQuery.length === 1 && (
-              <div className={styles.rfcHint}>Ingresa al menos 2 caracteres</div>
-            )}
-
-            {selectedItem && (
-              <div className={styles.selectedCard}>
-                <div className={styles.selectedCurp}>{selectedItem.curp}</div>
-                <div className={styles.selectedName}>
-                  {[selectedItem.nombre, selectedItem.paterno, selectedItem.materno].filter(Boolean).join(' ')}
-                </div>
-                <div className={styles.selectedMeta}>
-                  <span>Nacimiento: {formatFecnac(selectedItem.fecnac)}</span>
-                  <span>{selectedItem.sexo === 'H' ? 'Hombre' : selectedItem.sexo === 'M' ? 'Mujer' : selectedItem.sexo || '—'}</span>
-                  <span>{selectedItem.estado || '—'}</span>
-                </div>
-              </div>
-            )}
-          </section>
 
         </main>
 

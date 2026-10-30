@@ -669,6 +669,52 @@
   font-style: italic;
 }
 
+/* Nombre search grid */
+.nombreGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+  .nombreGrid { grid-template-columns: 1fr; }
+}
+
+.nombreField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.nombreField label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.nombreField input {
+  padding: 10px 13px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 9px;
+  font-size: 0.93rem;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #0f3460;
+  background: #fafafa;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  letter-spacing: 0.04em;
+}
+
+.nombreField input:focus {
+  border-color: #0f3460;
+  box-shadow: 0 0 0 3px rgba(15, 52, 96, 0.12);
+  background: white;
+}
+
 /* Footer */
 .footer {
   text-align: center;
