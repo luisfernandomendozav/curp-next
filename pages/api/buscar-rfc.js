@@ -32,10 +32,11 @@ export default async function handler(req, res) {
   try {
     const sql = neon(process.env.DATABASE_URL);
     const rows = await sql`
-      SELECT p.curp, p.nombre, p.paterno, p.materno, p.fecnac, p.sexo, e.nombre AS estado
+      SELECT DISTINCT ON (p.curp) p.curp, p.nombre, p.paterno, p.materno, p.fecnac, p.sexo, e.nombre AS estado
       FROM personas p
       LEFT JOIN estados e ON p.estado_id = e.id
       WHERE p.curp LIKE ${prefix + '%'}
+      ORDER BY p.curp
       LIMIT 50
     `;
     res.status(200).json({ base10: base10 || prefix, prefijo: prefix, resultados: rows });

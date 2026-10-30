@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import styles from '../styles/Home.module.css';
 
@@ -124,9 +124,12 @@ export default function Home() {
   const [showAudio, setShowAudio] = useState(false);
   const [searchMode, setSearchMode] = useState('curp');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResult, setSearchResult] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState('');
+  const wrapperRef = useRef(null);
+  const debounceRef = useRef(null);
 
   const r = calcCURP(form);
 
@@ -134,30 +137,68 @@ export default function Home() {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
-  const buscar = useCallback(async () => {
-    if (searchQuery.length < 2) return;
-    setSearchLoading(true);
-    setSearchError('');
-    setSearchResult(null);
-    try {
-      const endpoint = searchMode === 'curp' ? 'buscar-curp' : 'buscar-rfc';
-      const param = searchMode === 'curp' ? 'curp' : 'rfc';
-      const res = await fetch(`/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
-      if (!res.ok) { setSearchError(data.error || 'Error en la búsqueda'); return; }
-      setSearchResult(data);
-    } catch {
-      setSearchError('Error de conexión. Intenta de nuevo.');
-    } finally {
+  function formatFecnac(fecnac) {
+    if (!fecnac) return '—';
+    const [date] = fecnac.split(' ');
+    const [mm, dd, yy] = date.split('/');
+    const year = parseInt(yy, 10) <= 26 ? '20' + yy : '19' + yy;
+    return `${dd}/${mm}/${year}`;
+  }
+
+  useEffect(() => {
+    setSelectedItem(null);
+    if (searchQuery.length < 2) {
+      setSuggestions([]);
+      setShowDropdown(false);
       setSearchLoading(false);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
     }
+    setSearchLoading(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const endpoint = searchMode === 'curp' ? 'buscar-curp' : 'buscar-rfc';
+        const param = searchMode === 'curp' ? 'curp' : 'rfc';
+        const res = await fetch(`/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        if (res.ok) {
+          setSuggestions(data.resultados || []);
+          setShowDropdown(true);
+        } else {
+          setSuggestions([]);
+        }
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [searchQuery, searchMode]);
+
+  useEffect(() => {
+    function onMouseDown(e) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  function selectItem(item) {
+    setSelectedItem(item);
+    setShowDropdown(false);
+    setSearchQuery(item.curp);
+  }
 
   function switchMode(mode) {
     setSearchMode(mode);
     setSearchQuery('');
-    setSearchResult(null);
-    setSearchError('');
+    setSuggestions([]);
+    setSelectedItem(null);
+    setShowDropdown(false);
   }
 
   return (
@@ -323,67 +364,68 @@ export default function Home() {
             </div>
 
             <div className={styles.rfcInputRow}>
-              <input
-                className={styles.rfcInput}
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                onKeyDown={e => e.key === 'Enter' && buscar()}
-                placeholder={searchMode === 'curp' ? 'Ej: GO o GOBO800613HGTXXX8' : 'Ej: GO o GUMJ800613SI5'}
-                maxLength={18}
-                autoComplete="off"
-              />
-              <button
-                className={styles.rfcBtn}
-                onClick={buscar}
-                disabled={searchLoading || searchQuery.length < 2}
-              >
-                {searchLoading ? 'Buscando…' : 'Buscar'}
-              </button>
-            </div>
-            {searchQuery.length === 1 && (
-              <div className={styles.rfcHint}>Ingresa al menos 2 caracteres (1 restante)</div>
-            )}
+              <div className={styles.searchWrapper} ref={wrapperRef}>
+                <input
+                  className={styles.rfcInput}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                  onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+                  placeholder={searchMode === 'curp' ? 'Ej: GO, GOBO, GOBO800613…' : 'Ej: GO, GUMJ, GUMJ800613…'}
+                  maxLength={18}
+                  autoComplete="off"
+                />
 
-            {searchError && (
-              <div className={styles.rfcError}>{searchError}</div>
-            )}
-
-            {searchResult && (
-              <div className={styles.rfcBase10}>
-                Buscando CURPs que inician con: <code>{searchResult.base10 || searchResult.prefijo}</code>
-              </div>
-            )}
-
-            {searchResult && searchResult.resultados.length === 0 && (
-              <div className={styles.rfcEmpty}>
-                No se encontraron registros con el prefijo <strong>{searchResult.base10 || searchResult.prefijo}</strong> en los estados actualmente cargados.
-                <br />Puede que la persona sea de un estado aún no disponible (GRO, OAX, PUE, QRO, QROO, SIN, SLP, SON, TAB, TAM, TLX, VER, YUC, ZAC).
-              </div>
-            )}
-
-            {searchResult && searchResult.resultados.length > 0 && (
-              <div className={styles.rfcResults}>
-                <div className={styles.rfcCount}>
-                  {searchResult.resultados.length} resultado{searchResult.resultados.length !== 1 ? 's' : ''} encontrado{searchResult.resultados.length !== 1 ? 's' : ''}
-                  {searchResult.resultados.length === 50 ? ' (mostrando primeros 50 — ingresa más caracteres para afinar)' : ''}
-                </div>
-                <div className={styles.rfcTable}>
-                  <div className={styles.rfcTableHead}>
-                    <span>CURP</span>
-                    <span>Nombre completo</span>
-                    <span>F. Nac.</span>
-                    <span>Sexo</span>
-                    <span>Estado</span>
+                {searchLoading && searchQuery.length >= 2 && (
+                  <div className={styles.dropdown}>
+                    <div className={styles.dropdownLoading}>Buscando…</div>
                   </div>
-                  {searchResult.resultados.map((p, i) => (
-                    <div key={i} className={styles.rfcTableRow}>
-                      <span className={styles.curpCell}>{p.curp}</span>
-                      <span>{[p.nombre, p.paterno, p.materno].filter(Boolean).join(' ')}</span>
-                      <span>{p.fecnac ? p.fecnac.split(' ')[0] : '—'}</span>
-                      <span>{p.sexo === 'H' ? 'Hombre' : p.sexo === 'M' ? 'Mujer' : p.sexo || '—'}</span>
-                      <span>{p.estado || '—'}</span>
+                )}
+
+                {!searchLoading && showDropdown && suggestions.length > 0 && (
+                  <div className={styles.dropdown}>
+                    {suggestions.length === 50 && (
+                      <div className={styles.dropdownCount}>
+                        Mostrando 50 resultados — escribe más para afinar
+                      </div>
+                    )}
+                    {suggestions.map((item, i) => (
+                      <div key={i} className={styles.dropdownItem} onClick={() => selectItem(item)}>
+                        <div className={styles.dropdownCurp}>{item.curp}</div>
+                        <div className={styles.dropdownName}>
+                          {[item.nombre, item.paterno, item.materno].filter(Boolean).join(' ')}
+                        </div>
+                        <div className={styles.dropdownMeta}>
+                          {formatFecnac(item.fecnac)} · {item.sexo === 'H' ? 'Hombre' : item.sexo === 'M' ? 'Mujer' : item.sexo || '—'} · {item.estado || '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!searchLoading && showDropdown && searchQuery.length >= 2 && suggestions.length === 0 && (
+                  <div className={styles.dropdown}>
+                    <div className={styles.dropdownLoading}>
+                      Sin resultados para <strong>{searchQuery}</strong> en los estados cargados
                     </div>
-                  ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {searchQuery.length === 1 && (
+              <div className={styles.rfcHint}>Ingresa al menos 2 caracteres</div>
+            )}
+
+            {selectedItem && (
+              <div className={styles.selectedCard}>
+                <div className={styles.selectedCurp}>{selectedItem.curp}</div>
+                <div className={styles.selectedName}>
+                  {[selectedItem.nombre, selectedItem.paterno, selectedItem.materno].filter(Boolean).join(' ')}
+                </div>
+                <div className={styles.selectedMeta}>
+                  <span>Nacimiento: {formatFecnac(selectedItem.fecnac)}</span>
+                  <span>{selectedItem.sexo === 'H' ? 'Hombre' : selectedItem.sexo === 'M' ? 'Mujer' : selectedItem.sexo || '—'}</span>
+                  <span>{selectedItem.estado || '—'}</span>
                 </div>
               </div>
             )}
