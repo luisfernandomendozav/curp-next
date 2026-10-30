@@ -316,6 +316,43 @@
   color: #0f3460;
 }
 
+/* Search tabs */
+.searchTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.searchTab {
+  padding: 8px 22px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  color: #666;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.searchTab:hover {
+  border-color: #0f3460;
+  color: #0f3460;
+}
+
+.searchTabActive {
+  padding: 8px 22px;
+  border: 1.5px solid #0f3460;
+  border-radius: 8px;
+  background: #0f3460;
+  color: white;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: default;
+}
+
 /* RFC Search */
 .rfcSection {
   background: white;

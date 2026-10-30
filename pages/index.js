@@ -122,10 +122,11 @@ function calcCURP({ nombre, apellidoPaterno, apellidoMaterno, fechaNacimiento, s
 export default function Home() {
   const [form, setForm] = useState({ nombre: '', apellidoPaterno: '', apellidoMaterno: '', fechaNacimiento: '', sexo: '', estado: '' });
   const [showAudio, setShowAudio] = useState(false);
-  const [rfc, setRfc] = useState('');
-  const [rfcResult, setRfcResult] = useState(null);
-  const [rfcLoading, setRfcLoading] = useState(false);
-  const [rfcError, setRfcError] = useState('');
+  const [searchMode, setSearchMode] = useState('curp');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResult, setSearchResult] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const r = calcCURP(form);
 
@@ -133,22 +134,31 @@ export default function Home() {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
-  const buscarPorRfc = useCallback(async () => {
-    if (!rfc.trim()) return;
-    setRfcLoading(true);
-    setRfcError('');
-    setRfcResult(null);
+  const buscar = useCallback(async () => {
+    if (searchQuery.length < 2) return;
+    setSearchLoading(true);
+    setSearchError('');
+    setSearchResult(null);
     try {
-      const res = await fetch(`/api/buscar-rfc?rfc=${encodeURIComponent(rfc.trim())}`);
+      const endpoint = searchMode === 'curp' ? 'buscar-curp' : 'buscar-rfc';
+      const param = searchMode === 'curp' ? 'curp' : 'rfc';
+      const res = await fetch(`/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
-      if (!res.ok) { setRfcError(data.error || 'Error en la búsqueda'); return; }
-      setRfcResult(data);
+      if (!res.ok) { setSearchError(data.error || 'Error en la búsqueda'); return; }
+      setSearchResult(data);
     } catch {
-      setRfcError('Error de conexión. Intenta de nuevo.');
+      setSearchError('Error de conexión. Intenta de nuevo.');
     } finally {
-      setRfcLoading(false);
+      setSearchLoading(false);
     }
-  }, [rfc]);
+  }, [searchQuery, searchMode]);
+
+  function switchMode(mode) {
+    setSearchMode(mode);
+    setSearchQuery('');
+    setSearchResult(null);
+    setSearchError('');
+  }
 
   return (
     <>
@@ -276,14 +286,37 @@ export default function Home() {
             </section>
           </div>
 
-          {/* RFC → CURP Search */}
+          {/* Búsqueda en el Padrón */}
           <section className={styles.rfcSection}>
-            <h2>Buscar CURP por RFC</h2>
-            <p className={styles.rfcDesc}>
-              Los primeros 10 caracteres del RFC son idénticos a los primeros 10 de la CURP
-              (4 letras del nombre + 6 dígitos de fecha). Ingresa el RFC completo o solo los primeros 10 caracteres
-              y buscamos en todos los estados del padrón automáticamente.
-            </p>
+            <h2>Buscar en el Padrón Electoral</h2>
+
+            <div className={styles.searchTabs}>
+              <button
+                className={searchMode === 'curp' ? styles.searchTabActive : styles.searchTab}
+                onClick={() => switchMode('curp')}
+              >
+                Buscar por CURP
+              </button>
+              <button
+                className={searchMode === 'rfc' ? styles.searchTabActive : styles.searchTab}
+                onClick={() => switchMode('rfc')}
+              >
+                Buscar por RFC
+              </button>
+            </div>
+
+            {searchMode === 'curp' ? (
+              <p className={styles.rfcDesc}>
+                Ingresa los primeros caracteres de la CURP para buscar en el padrón.
+                Con 2 caracteres ya obtienes resultados; entre más completa, más precisa la búsqueda.
+              </p>
+            ) : (
+              <p className={styles.rfcDesc}>
+                Los primeros 10 caracteres del RFC son idénticos a los primeros 10 de la CURP
+                (4 letras del nombre + 6 dígitos de fecha). Con 2 caracteres ya obtienes resultados;
+                con 10 o más el filtro es muy preciso.
+              </p>
+            )}
 
             <div className={styles.rfcCoverage}>
               Cobertura actual: <strong>18 de 32 estados</strong> cargados · ~68M registros
@@ -292,47 +325,47 @@ export default function Home() {
             <div className={styles.rfcInputRow}>
               <input
                 className={styles.rfcInput}
-                value={rfc}
-                onChange={e => setRfc(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                onKeyDown={e => e.key === 'Enter' && buscarPorRfc()}
-                placeholder="Ej: GUMJ800613SI5"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                onKeyDown={e => e.key === 'Enter' && buscar()}
+                placeholder={searchMode === 'curp' ? 'Ej: GO o GOBO800613HGTXXX8' : 'Ej: GO o GUMJ800613SI5'}
                 maxLength={18}
                 autoComplete="off"
               />
               <button
                 className={styles.rfcBtn}
-                onClick={buscarPorRfc}
-                disabled={rfcLoading || rfc.length < 10}
+                onClick={buscar}
+                disabled={searchLoading || searchQuery.length < 2}
               >
-                {rfcLoading ? 'Buscando…' : 'Buscar'}
+                {searchLoading ? 'Buscando…' : 'Buscar'}
               </button>
             </div>
-            {rfc.length > 0 && rfc.length < 10 && (
-              <div className={styles.rfcHint}>Ingresa al menos 10 caracteres ({10 - rfc.length} restantes)</div>
+            {searchQuery.length === 1 && (
+              <div className={styles.rfcHint}>Ingresa al menos 2 caracteres (1 restante)</div>
             )}
 
-            {rfcError && (
-              <div className={styles.rfcError}>{rfcError}</div>
+            {searchError && (
+              <div className={styles.rfcError}>{searchError}</div>
             )}
 
-            {rfcResult && (
+            {searchResult && (
               <div className={styles.rfcBase10}>
-                Buscando CURPs que inician con: <code>{rfcResult.base10}</code>
+                Buscando CURPs que inician con: <code>{searchResult.base10 || searchResult.prefijo}</code>
               </div>
             )}
 
-            {rfcResult && rfcResult.resultados.length === 0 && (
+            {searchResult && searchResult.resultados.length === 0 && (
               <div className={styles.rfcEmpty}>
-                No se encontraron registros con la clave <strong>{rfcResult.base10}</strong> en los estados actualmente cargados.
+                No se encontraron registros con el prefijo <strong>{searchResult.base10 || searchResult.prefijo}</strong> en los estados actualmente cargados.
                 <br />Puede que la persona sea de un estado aún no disponible (GRO, OAX, PUE, QRO, QROO, SIN, SLP, SON, TAB, TAM, TLX, VER, YUC, ZAC).
               </div>
             )}
 
-            {rfcResult && rfcResult.resultados.length > 0 && (
+            {searchResult && searchResult.resultados.length > 0 && (
               <div className={styles.rfcResults}>
                 <div className={styles.rfcCount}>
-                  {rfcResult.resultados.length} resultado{rfcResult.resultados.length !== 1 ? 's' : ''} encontrado{rfcResult.resultados.length !== 1 ? 's' : ''}
-                  {rfcResult.resultados.length === 20 ? ' (mostrando primeros 20)' : ''}
+                  {searchResult.resultados.length} resultado{searchResult.resultados.length !== 1 ? 's' : ''} encontrado{searchResult.resultados.length !== 1 ? 's' : ''}
+                  {searchResult.resultados.length === 50 ? ' (mostrando primeros 50 — ingresa más caracteres para afinar)' : ''}
                 </div>
                 <div className={styles.rfcTable}>
                   <div className={styles.rfcTableHead}>
@@ -342,12 +375,12 @@ export default function Home() {
                     <span>Sexo</span>
                     <span>Estado</span>
                   </div>
-                  {rfcResult.resultados.map((p, i) => (
+                  {searchResult.resultados.map((p, i) => (
                     <div key={i} className={styles.rfcTableRow}>
                       <span className={styles.curpCell}>{p.curp}</span>
                       <span>{[p.nombre, p.paterno, p.materno].filter(Boolean).join(' ')}</span>
                       <span>{p.fecnac ? p.fecnac.split(' ')[0] : '—'}</span>
-                      <span>{p.sexo === 'H' ? 'Hombre' : 'Mujer'}</span>
+                      <span>{p.sexo === 'H' ? 'Hombre' : p.sexo === 'M' ? 'Mujer' : p.sexo || '—'}</span>
                       <span>{p.estado || '—'}</span>
                     </div>
                   ))}
