@@ -129,8 +129,11 @@ export default function Home() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [slowSearch, setSlowSearch] = useState(false);
   const wrapperRef = useRef(null);
   const debounceRef = useRef(null);
+  const abortRef = useRef(null);
+  const slowTimerRef = useRef(null);
 
   // Nombre search
   const [nombreQ, setNombreQ] = useState('');
@@ -138,7 +141,10 @@ export default function Home() {
   const [maternoQ, setMaternoQ] = useState('');
   const [nombreResults, setNombreResults] = useState(null);
   const [nombreLoading, setNombreLoading] = useState(false);
+  const [nombreSlow, setNombreSlow] = useState(false);
   const nombreDebounceRef = useRef(null);
+  const nombreAbortRef = useRef(null);
+  const nombreSlowTimerRef = useRef(null);
 
   const r = calcCURP(form);
 
@@ -155,20 +161,32 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortRef.current) abortRef.current.abort();
+    if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+
     if (searchQuery.length < 2) {
       setSuggestions([]);
       setShowDropdown(false);
       setSearchLoading(false);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      setSlowSearch(false);
       return;
     }
+
     setSearchLoading(true);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setSlowSearch(false);
+    slowTimerRef.current = setTimeout(() => setSlowSearch(true), 3000);
+
     debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      abortRef.current = controller;
       try {
         const endpoint = searchMode === 'curp' ? 'buscar-curp' : 'buscar-rfc';
         const param = searchMode === 'curp' ? 'curp' : 'rfc';
-        const res = await fetch(`/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`);
+        const res = await fetch(
+          `/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`,
+          { signal: controller.signal }
+        );
         const data = await res.json();
         if (res.ok) {
           setSuggestions(data.resultados || []);
@@ -176,13 +194,22 @@ export default function Home() {
         } else {
           setSuggestions([]);
         }
-      } catch {
-        setSuggestions([]);
+      } catch (err) {
+        if (err.name !== 'AbortError') setSuggestions([]);
       } finally {
-        setSearchLoading(false);
+        if (!controller.signal.aborted) {
+          setSearchLoading(false);
+          setSlowSearch(false);
+          clearTimeout(slowTimerRef.current);
+        }
       }
     }, 350);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (abortRef.current) abortRef.current.abort();
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    };
   }, [searchQuery, searchMode]);
 
   useEffect(() => {
@@ -196,32 +223,50 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
+    if (nombreAbortRef.current) nombreAbortRef.current.abort();
+    if (nombreSlowTimerRef.current) clearTimeout(nombreSlowTimerRef.current);
+
     const hasNombre = nombreQ.length >= 2;
     const hasPaterno = paternoQ.length >= 2;
     if (!hasNombre && !hasPaterno) {
       setNombreResults(null);
       setNombreLoading(false);
-      if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
+      setNombreSlow(false);
       return;
     }
+
     setNombreLoading(true);
-    if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
+    setNombreSlow(false);
+    nombreSlowTimerRef.current = setTimeout(() => setNombreSlow(true), 3000);
+
     nombreDebounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      nombreAbortRef.current = controller;
       try {
         const params = new URLSearchParams();
         if (nombreQ) params.set('nombre', nombreQ);
         if (paternoQ) params.set('paterno', paternoQ);
         if (maternoQ) params.set('materno', maternoQ);
-        const res = await fetch(`/api/buscar-nombre?${params}`);
+        const res = await fetch(`/api/buscar-nombre?${params}`, { signal: controller.signal });
         const data = await res.json();
         setNombreResults(res.ok ? (data.resultados || []) : []);
-      } catch {
-        setNombreResults([]);
+      } catch (err) {
+        if (err.name !== 'AbortError') setNombreResults([]);
       } finally {
-        setNombreLoading(false);
+        if (!controller.signal.aborted) {
+          setNombreLoading(false);
+          setNombreSlow(false);
+          clearTimeout(nombreSlowTimerRef.current);
+        }
       }
     }, 500);
-    return () => { if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current); };
+
+    return () => {
+      if (nombreDebounceRef.current) clearTimeout(nombreDebounceRef.current);
+      if (nombreAbortRef.current) nombreAbortRef.current.abort();
+      if (nombreSlowTimerRef.current) clearTimeout(nombreSlowTimerRef.current);
+    };
   }, [nombreQ, paternoQ, maternoQ]);
 
   function selectItem(item) {
@@ -293,7 +338,11 @@ export default function Home() {
 
                 {searchLoading && searchQuery.length >= 2 && (
                   <div className={styles.dropdown}>
-                    <div className={styles.dropdownLoading}>Buscando…</div>
+                    <div className={styles.dropdownLoading}>
+                      {slowSearch
+                        ? 'La base de datos está despertando, espera unos segundos…'
+                        : 'Buscando…'}
+                    </div>
                   </div>
                 )}
 
@@ -385,7 +434,11 @@ export default function Home() {
             </div>
 
             {nombreLoading && (
-              <div className={styles.dropdownLoading} style={{ padding: '12px 0' }}>Buscando…</div>
+              <div className={styles.dropdownLoading} style={{ padding: '12px 0' }}>
+                {nombreSlow
+                  ? 'La base de datos está despertando, espera unos segundos…'
+                  : 'Buscando…'}
+              </div>
             )}
 
             {!nombreLoading && nombreResults !== null && nombreResults.length === 0 && (
