@@ -178,26 +178,36 @@ export default function Home() {
 
     debounceRef.current = setTimeout(async () => {
       const myId = ++searchReqId.current;
+      console.log(`[search] debounce fired — query="${searchQuery}" mode=${searchMode} reqId=${myId}`);
       try {
         const endpoint = searchMode === 'curp' ? 'buscar-curp' : 'buscar-rfc';
         const param = searchMode === 'curp' ? 'curp' : 'rfc';
-        const res = await fetch(`/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`);
+        const url = `/api/${endpoint}?${param}=${encodeURIComponent(searchQuery)}`;
+        console.log(`[search] fetching ${url}`);
+        const res = await fetch(url);
         const data = await res.json();
-        if (myId !== searchReqId.current) return;
+        console.log(`[search] response — status=${res.status} resultados=${data.resultados?.length ?? 'n/a'} myId=${myId} currentId=${searchReqId.current}`, data);
+        if (myId !== searchReqId.current) { console.log('[search] stale, ignoring'); return; }
         if (res.ok) {
+          console.log(`[search] setting ${data.resultados?.length} suggestions, showDropdown=true`);
           setSuggestions(data.resultados || []);
           setShowDropdown(true);
         } else {
+          console.log('[search] error response:', data);
           setSuggestions([]);
         }
-      } catch {
+      } catch (err) {
+        console.error('[search] fetch threw:', err);
         if (myId !== searchReqId.current) return;
         setSuggestions([]);
       } finally {
         if (myId === searchReqId.current) {
+          console.log('[search] finally — clearing loading');
           setSearchLoading(false);
           setSlowSearch(false);
           clearTimeout(slowTimerRef.current);
+        } else {
+          console.log('[search] finally — stale req, NOT clearing loading');
         }
       }
     }, 350);
